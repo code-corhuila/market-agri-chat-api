@@ -82,6 +82,16 @@ func (m *Memory) ListByParticipant(_ context.Context, userID string, page, limit
 	return mine[from:to], len(mine), nil
 }
 
+func (m *Memory) SetPurchaseMethod(_ context.Context, id string, method model.PurchaseMethod) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if c, ok := m.conversations[id]; ok {
+		c.ChoosePurchaseMethod(method)
+		m.conversations[id] = c
+	}
+	return nil
+}
+
 // listedBefore is the order of E-31: conversations with messages first, by lastMessageAt
 // descending; then those without, by createdAt descending; then by id.
 func listedBefore(a, b model.Conversation) bool {

@@ -66,6 +66,12 @@ func Open(id string, product ProductSnapshot, buyerID, buyerName string, now tim
 	}, nil
 }
 
+// ChoosePurchaseMethod records what the parties agreed; the last choice wins (D-C15). Only the
+// choice is kept, never a detail of an off-platform arrangement (FR-021).
+func (c *Conversation) ChoosePurchaseMethod(m PurchaseMethod) {
+	c.AgreedPurchaseMethod = &m
+}
+
 // EnsureParticipant: only the buyer and the producer read and write it (AGGR-INV-002).
 func (c Conversation) EnsureParticipant(userID string) error {
 	if userID != c.BuyerID && userID != c.ProducerID {
