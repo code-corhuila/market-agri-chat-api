@@ -4,7 +4,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,7 +14,14 @@ import (
 	"syscall"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
+
 	"github.com/code-corhuila/market-agri-chat-api/internal/adapter/in/httpapi"
+	"github.com/code-corhuila/market-agri-chat-api/internal/adapter/out/catalog"
+	"github.com/code-corhuila/market-agri-chat-api/internal/adapter/out/persistence"
+	"github.com/code-corhuila/market-agri-chat-api/internal/application/usecase"
 	"github.com/code-corhuila/market-agri-chat-api/internal/config"
 )
 
@@ -31,10 +40,38 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	// A wrong key stops the start now, not on the first request (ADR-020 point 7).
-	if _, err := httpapi.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, time.Now); err != nil {
+	verifier, err := httpapi.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, time.Now)
+	if err != nil {
 		return err
 	}
-	handler := httpapi.NewHandler(logger, func(*http.ServeMux) {})
+	client, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURL).
+		SetServerSelectionTimeout(cfg.MongoServerSelection).SetMaxPoolSize(cfg.MongoMaxPool))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = client.Disconnect(context.Background()) }()
+	ping := func(ctx context.Context) error {
+		ctx, cancel := context.WithTimeout(ctx, cfg.PingTimeout)
+		defer cancel()
+		return client.Ping(ctx, readpref.Primary())
+	}
+
+	conversations := &usecase.Conversations{
+		Store: persistence.NewMongo(client.Database(cfg.MongoDatabase)),
+		Catalog: &catalog.Client{
+			BaseURL: cfg.CatalogAPIURL, ServiceToken: cfg.ServiceToken, Timeout: cfg.HTTPTimeout,
+			Attempts: cfg.HTTPAttempts, BaseDelay: cfg.HTTPBaseDelay, HTTP: &http.Client{},
+			CorrelationID: httpapi.CorrelationID,
+		},
+		NewID: newUUID,
+		// MongoDB keeps milliseconds: the instant is truncated so a reread equals what was written.
+		Now: func() time.Time { return time.Now().UTC().Truncate(time.Millisecond) },
+	}
+	auth := httpapi.Auth{Verifier: verifier}
+	handler := httpapi.NewHandler(logger, func(mux *http.ServeMux) {
+		httpapi.ReadinessRoute(ping)(mux)
+		httpapi.ConversationRoutes(auth, conversations, cfg.MaxBodyBytes)(mux)
+	})
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -58,4 +95,13 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+// newUUID: a random (version 4) UUID in lower case, the id of a new conversation.
+func newUUID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
