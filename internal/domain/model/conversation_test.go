@@ -67,3 +67,12 @@ func TestPurchaseMethodIsAClosedEnum(t *testing.T) {
 		}
 	}
 }
+
+func TestChoosePurchaseMethodKeepsTheLastChoice(t *testing.T) {
+	c := Conversation{ID: "c"}
+	c.ChoosePurchaseMethod(OffPlatform)
+	c.ChoosePurchaseMethod(Platform)
+	if c.AgreedPurchaseMethod == nil || *c.AgreedPurchaseMethod != Platform {
+		t.Fatalf("last write wins: %v", c.AgreedPurchaseMethod)
+	}
+}

@@ -122,3 +122,10 @@ func (m *Mongo) ListByParticipant(ctx context.Context, userID string, page, limi
 	}
 	return items, int(total), nil
 }
+
+// SetPurchaseMethod: a $set of the one field, so a concurrent choice is simply the last write.
+func (m *Mongo) SetPurchaseMethod(ctx context.Context, id string, method model.PurchaseMethod) error {
+	_, err := m.conversations.UpdateOne(ctx, bson.D{{Key: "_id", Value: id}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "agreedPurchaseMethod", Value: string(method)}}}})
+	return err
+}
