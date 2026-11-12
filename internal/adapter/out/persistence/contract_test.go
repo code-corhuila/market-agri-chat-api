@@ -90,6 +90,27 @@ func storeContract(t *testing.T, newStore func(t *testing.T) out.ConversationSto
 			t.Fatalf("a page past the last is empty with the real total: %d %d", total, len(items))
 		}
 	})
+
+	t.Run("the purchase method is set and only it changes", func(t *testing.T) {
+		s := newStore(t)
+		c := open("a5555555-5555-4555-8555-555555555555", "b5555555-5555-4555-8555-555555555555", buyer, base)
+		if err := s.Insert(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range []model.PurchaseMethod{model.OffPlatform, model.Platform} {
+			if err := s.SetPurchaseMethod(ctx, c.ID, m); err != nil {
+				t.Fatal(err)
+			}
+		}
+		got, err := s.FindByID(ctx, c.ID)
+		if err != nil || got == nil || got.AgreedPurchaseMethod == nil || *got.AgreedPurchaseMethod != model.Platform {
+			t.Fatalf("last write wins: %+v %v", got, err)
+		}
+		got.AgreedPurchaseMethod = nil
+		if *got != c {
+			t.Fatalf("nothing else changes: %+v", *got)
+		}
+	})
 }
 
 func ids(cs []model.Conversation) []string {
