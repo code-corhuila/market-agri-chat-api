@@ -13,8 +13,9 @@ outbox relay). The core imports no framework, driver or HTTP package.
 
 ## Configuration
 
-`JWT_ISSUER` and `JWT_PUBLIC_KEY` (PEM on one line with literal `\n`, or `JWT_PUBLIC_KEY_FILE`) are
-required; `PORT` defaults to `8080`. Limits (Anexo C 5.3.10) live in `internal/config/config.go`.
+`JWT_ISSUER` and `JWT_PUBLIC_KEY` (PEM on one line with literal `\n`, or `JWT_PUBLIC_KEY_FILE`),
+`MONGO_URL` (as `chat_app`, `replicaSet=rs0`), `CATALOG_API_URL` (I-02) and `SERVICE_TOKEN` (client
+`chat`) are required; `PORT` defaults to `8080`. `deploy/compose.yml` is what market-agri-infra includes. Limits (Anexo C 5.3.10) live in `internal/config/config.go`.
 
 ## Behaviour common to every route
 
@@ -33,6 +34,7 @@ required; `PORT` defaults to `8080`. Limits (Anexo C 5.3.10) live in `internal/c
 ```bash
 gofmt -l . && go vet ./... && go test -race ./...
 docker build -f deploy/Dockerfile .          # also runs the tests
+MONGO_TEST_URL=<admin URL of a dev instance> go test -tags integration ./internal/adapter/out/persistence/
 ```
 
 ## Branching

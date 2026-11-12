@@ -15,6 +15,11 @@ type Config struct {
 	JWTIssuer    string
 	JWTPublicKey string
 
+	MongoURL      string // as chat_app, replicaSet=rs0 (market-agri-infra-mongo)
+	MongoDatabase string
+	CatalogAPIURL string // I-02
+	ServiceToken  string // the token of the client chat, issued by I-01 (ADR-020 point 5)
+
 	ReadHeaderTimeout time.Duration // slow clients cannot hold a connection open
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
@@ -22,9 +27,17 @@ type Config struct {
 	MaxHeaderBytes    int
 	MaxBodyBytes      int64         // JSON bodies of E-30 and E-34 are tiny
 	ShutdownTimeout   time.Duration // graceful shutdown, shorter than the compose stop_grace_period
+
+	MongoServerSelection time.Duration // how long a query waits for the primary
+	MongoMaxPool         uint64
+	PingTimeout          time.Duration // readiness
+	HTTPTimeout          time.Duration // per attempt of an outgoing call (Anexo D)
+	HTTPAttempts         int
+	HTTPBaseDelay        time.Duration // full jitter base of the retries
 }
 
-// Load reads the environment. JWT_ISSUER and JWT_PUBLIC_KEY (or JWT_PUBLIC_KEY_FILE) are required.
+// Load reads the environment. JWT_ISSUER, JWT_PUBLIC_KEY (or JWT_PUBLIC_KEY_FILE), MONGO_URL,
+// CATALOG_API_URL and SERVICE_TOKEN are required.
 func Load() (Config, error) {
 	c := Config{
 		Port:              env("PORT", "8080"),
@@ -37,6 +50,17 @@ func Load() (Config, error) {
 		MaxHeaderBytes:    16 << 10,
 		MaxBodyBytes:      16 << 10,
 		ShutdownTimeout:   20 * time.Second,
+
+		MongoURL:             os.Getenv("MONGO_URL"),
+		MongoDatabase:        "chat",
+		CatalogAPIURL:        os.Getenv("CATALOG_API_URL"),
+		ServiceToken:         os.Getenv("SERVICE_TOKEN"),
+		MongoServerSelection: 5 * time.Second,
+		MongoMaxPool:         20,
+		PingTimeout:          2 * time.Second,
+		HTTPTimeout:          3 * time.Second,
+		HTTPAttempts:         3,
+		HTTPBaseDelay:        200 * time.Millisecond,
 	}
 	if file := os.Getenv("JWT_PUBLIC_KEY_FILE"); c.JWTPublicKey == "" && file != "" {
 		raw, err := os.ReadFile(file)
@@ -51,6 +75,13 @@ func Load() (Config, error) {
 	}
 	if strings.TrimSpace(c.JWTPublicKey) == "" {
 		missing = append(missing, "JWT_PUBLIC_KEY")
+	}
+	for _, v := range []struct{ name, value string }{
+		{"MONGO_URL", c.MongoURL}, {"CATALOG_API_URL", c.CatalogAPIURL}, {"SERVICE_TOKEN", c.ServiceToken},
+	} { // a slice, not a map: the message lists the variables always in the same order
+		if strings.TrimSpace(v.value) == "" {
+			missing = append(missing, v.name)
+		}
 	}
 	if len(missing) > 0 {
 		return Config{}, errors.New("missing required variables: " + strings.Join(missing, ", "))
