@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/code-corhuila/market-agri-chat-api/internal/adapter/in/httpapi"
 	"github.com/code-corhuila/market-agri-chat-api/internal/config"
@@ -27,6 +28,10 @@ func main() {
 func run(logger *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
+		return err
+	}
+	// A wrong key stops the start now, not on the first request (ADR-020 point 7).
+	if _, err := httpapi.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, time.Now); err != nil {
 		return err
 	}
 	handler := httpapi.NewHandler(logger, func(*http.ServeMux) {})

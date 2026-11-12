@@ -24,6 +24,9 @@ required; `PORT` defaults to `8080`. Limits (Anexo C 5.3.10) live in `internal/c
   neutral message (detail only in the log).
 - `X-Correlation-Id` reused when safe (`[A-Za-z0-9._-]{1,128}`), generated otherwise, returned and
   logged on every line (JSON, one object per line).
+- Tokens validated locally (RS256 only, issuer, `exp` with 30 s of skew, `sub`, known role): no valid
+  token → `401` with `WWW-Authenticate: Bearer`; a service token outside `/internal/**`, a user token
+  inside it, or a role the route does not take → `403`. A wrong `JWT_PUBLIC_KEY` stops the start.
 
 ## Run the tests
 
