@@ -18,6 +18,8 @@ type ConversationStore interface {
 	FindByProductAndBuyer(ctx context.Context, productID, buyerID string) (*model.Conversation, error)
 	// ListByParticipant: E-31 order; total counts every conversation of the user.
 	ListByParticipant(ctx context.Context, userID string, page, limit int) ([]model.Conversation, int, error)
+	// SetPurchaseMethod changes only agreedPurchaseMethod (E-34).
+	SetPurchaseMethod(ctx context.Context, id string, m model.PurchaseMethod) error
 }
 
 // ProductCatalog reads a product from catalog-service (I-02): model.ErrProductNotFound when it is

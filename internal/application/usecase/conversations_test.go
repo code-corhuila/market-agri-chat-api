@@ -132,3 +132,31 @@ func TestListIsOfTheCaller(t *testing.T) {
 		t.Fatalf("a stranger sees nothing: %+v", page)
 	}
 }
+
+func TestChoosePurchaseMethod(t *testing.T) {
+	ctx := context.Background()
+	svc, store := newService(&fakeCatalog{products: map[string]model.ProductSnapshot{mora.ID: mora}})
+	c, _, _ := svc.Open(ctx, carlos, mora.ID)
+
+	got, err := svc.ChoosePurchaseMethod(ctx, buyerID, c.ID, model.OffPlatform)
+	if err != nil || got.AgreedPurchaseMethod == nil || *got.AgreedPurchaseMethod != model.OffPlatform {
+		t.Fatalf("the buyer chooses: %+v %v", got.AgreedPurchaseMethod, err)
+	}
+	got, err = svc.ChoosePurchaseMethod(ctx, mora.ProducerID, c.ID, model.Platform)
+	if err != nil || *got.AgreedPurchaseMethod != model.Platform || got.BuyerName != "Carlos Pérez" {
+		t.Fatalf("the producer chooses, last write wins: %+v %v", got, err)
+	}
+	if stored, _ := store.FindByID(ctx, c.ID); stored == nil || stored.AgreedPurchaseMethod == nil || *stored.AgreedPurchaseMethod != model.Platform {
+		t.Fatalf("the choice is stored: %+v", stored)
+	}
+
+	if _, err := svc.ChoosePurchaseMethod(ctx, "x", c.ID, model.OffPlatform); !errors.Is(err, model.ErrNotAParticipant) {
+		t.Fatalf("stranger: %v", err)
+	}
+	if stored, _ := store.FindByID(ctx, c.ID); *stored.AgreedPurchaseMethod != model.Platform {
+		t.Fatalf("a stranger changes nothing: %v", *stored.AgreedPurchaseMethod)
+	}
+	if _, err := svc.ChoosePurchaseMethod(ctx, "x", "missing", model.Platform); !errors.Is(err, model.ErrConversationNotFound) {
+		t.Fatalf("missing must be 404 even for a stranger: %v", err)
+	}
+}
