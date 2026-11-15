@@ -75,6 +75,19 @@ func (u *Conversations) List(ctx context.Context, userID string, page, limit int
 	return in.Page{Items: items, Total: total}, err
 }
 
+// ChoosePurchaseMethod (E-34): as E-32 (404 before 403), then the choice; the last write wins.
+func (u *Conversations) ChoosePurchaseMethod(ctx context.Context, userID, id string, m model.PurchaseMethod) (model.Conversation, error) {
+	c, err := u.Get(ctx, userID, id)
+	if err != nil {
+		return model.Conversation{}, err
+	}
+	c.ChoosePurchaseMethod(m)
+	if err := u.Store.SetPurchaseMethod(ctx, id, m); err != nil {
+		return model.Conversation{}, err
+	}
+	return c, nil
+}
+
 func deref(c *model.Conversation) model.Conversation {
 	if c == nil {
 		return model.Conversation{}

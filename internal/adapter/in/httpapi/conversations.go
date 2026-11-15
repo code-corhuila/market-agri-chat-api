@@ -59,7 +59,7 @@ func viewOf(c model.Conversation) ConversationView {
 // timestamp: ISO 8601 in UTC with an explicit offset (api-contract §1).
 func timestamp(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
-// ConversationRoutes mounts E-30, E-31, E-32 and I-05.
+// ConversationRoutes mounts E-30, E-31, E-32, E-34 and I-05.
 func ConversationRoutes(auth Auth, conversations in.Conversations, maxBody int64) func(*http.ServeMux) {
 	return func(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/v1/chat/conversations", auth.User([]string{"BUYER"}, func(w http.ResponseWriter, r *http.Request) {
@@ -105,6 +105,24 @@ func ConversationRoutes(auth Auth, conversations in.Conversations, maxBody int64
 		mux.HandleFunc("GET /api/v1/chat/conversations/{id}", auth.User([]string{"PRODUCER", "BUYER"}, func(w http.ResponseWriter, r *http.Request) {
 			// A malformed {id} finds nothing, so it is 404 like a missing one (the card of E-32).
 			c, err := conversations.Get(r.Context(), CallerFrom(r.Context()).UserID, r.PathValue("id"))
+			if err != nil {
+				writeDomainError(w, r, err)
+				return
+			}
+			WriteJSON(w, http.StatusOK, viewOf(c))
+		}))
+
+		mux.HandleFunc("PUT /api/v1/chat/conversations/{id}/purchase-method", auth.User([]string{"PRODUCER", "BUYER"}, func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Method string `json:"method"`
+			}
+			err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&body)
+			method, invalid := model.ParsePurchaseMethod(body.Method)
+			if err != nil || invalid != nil { // null, missing or another value: 400 before the lookup (E-34)
+				WriteError(w, r, CodeValidation, FieldDetail{"method", "Debe ser PLATFORM u OFF_PLATFORM."})
+				return
+			}
+			c, err := conversations.ChoosePurchaseMethod(r.Context(), CallerFrom(r.Context()).UserID, r.PathValue("id"), method)
 			if err != nil {
 				writeDomainError(w, r, err)
 				return

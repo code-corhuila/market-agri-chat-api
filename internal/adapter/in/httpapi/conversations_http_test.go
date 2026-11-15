@@ -211,3 +211,41 @@ func TestE31(t *testing.T) {
 		}
 	}
 }
+
+func TestE34(t *testing.T) {
+	f := newChatFixture(t, stubCatalog{})
+	call(f.h, http.MethodPost, "/api/v1/chat/conversations", f.buyer, `{"productId":"`+moraID+`"}`)
+	path := "/api/v1/chat/conversations/7e0b1d2c-3a4f-4b5c-8d6e-9f0a1b2c3d4e/purchase-method"
+
+	rec := call(f.h, http.MethodPut, path, f.buyer, `{"method":"OFF_PLATFORM"}`)
+	if v := view(t, rec); rec.Code != 200 || v["agreedPurchaseMethod"] != "OFF_PLATFORM" || v["id"] != "7e0b1d2c-3a4f-4b5c-8d6e-9f0a1b2c3d4e" {
+		t.Fatalf("buyer: %d %v", rec.Code, v)
+	}
+	rec = call(f.h, http.MethodPut, path, f.producer, `{"method":"PLATFORM"}`)
+	if v := view(t, rec); rec.Code != 200 || v["agreedPurchaseMethod"] != "PLATFORM" {
+		t.Fatalf("producer, last write wins: %d %v", rec.Code, v)
+	}
+
+	for _, body := range []string{`{"method":null}`, `{}`, `{"method":"platform"}`, `{"method":"CASH"}`, `{"method":1}`, `{`, `{"method":"PLATFORM","method":5}`} {
+		rec := call(f.h, http.MethodPut, path, f.buyer, body)
+		if v := view(t, rec); rec.Code != 400 || v["error"] != "VALIDATION_ERROR" || !strings.Contains(rec.Body.String(), `"field":"method"`) {
+			t.Fatalf("%s: %d %v", body, rec.Code, v)
+		}
+	}
+	missing := "/api/v1/chat/conversations/7e0b1d2c-3a4f-4b5c-8d6e-000000000000/purchase-method"
+	if rec := call(f.h, http.MethodPut, missing, f.stranger, `{"method":null}`); rec.Code != 400 {
+		t.Fatalf("400 comes before 404: %d", rec.Code)
+	}
+	if v := view(t, call(f.h, http.MethodPut, missing, f.stranger, `{"method":"PLATFORM"}`)); v["error"] != "CONVERSATION_NOT_FOUND" {
+		t.Fatalf("missing: %v", v)
+	}
+	if v := view(t, call(f.h, http.MethodPut, path, f.stranger, `{"method":"OFF_PLATFORM"}`)); v["error"] != "NOT_A_PARTICIPANT" {
+		t.Fatalf("stranger: %v", v)
+	}
+	if rec := call(f.h, http.MethodPut, path, f.service, `{"method":"PLATFORM"}`); rec.Code != 403 {
+		t.Fatalf("a service token outside /internal: %d", rec.Code)
+	}
+	if v := view(t, call(f.h, http.MethodGet, "/api/v1/chat/conversations/7e0b1d2c-3a4f-4b5c-8d6e-9f0a1b2c3d4e", f.buyer, "")); v["agreedPurchaseMethod"] != "PLATFORM" {
+		t.Fatalf("E-32 shows the last choice: %v", v)
+	}
+}
