@@ -1,0 +1,36 @@
+# Included by market-agri-infra (Anexo G). No `ports`: only the API Gateway publishes one. MongoDB
+# and chat_app are owned by market-agri-infra-mongo; the collections, by market-agri-chat-db (run
+# chat-db-migrate before `up`: the service never migrates).
+services:
+  chat-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      PORT: "8080"
+      MONGO_URL: mongodb://chat_app:${CHAT_APP_PASSWORD:?set CHAT_APP_PASSWORD}@mongo:27017/chat?authSource=chat&replicaSet=rs0
+      JWT_ISSUER: ${JWT_ISSUER:?set JWT_ISSUER}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?set JWT_PUBLIC_KEY}
+      CATALOG_API_URL: http://catalog-api:8080
+      # The token of the client chat (sub service:chat), issued by I-01 in qa and main; dev-keys.sh in dev.
+      SERVICE_TOKEN: ${CHAT_SERVICE_TOKEN:?set CHAT_SERVICE_TOKEN}
+    depends_on:                       # mongo lives in market-agri-infra-mongo; resolved when included
+      mongo:
+        condition: service_healthy
+    expose:
+      - "8080"
+    healthcheck:                      # readiness: healthy only when MongoDB answers (D-C20)
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    # Longer than the 20 s graceful shutdown of internal/config.
+    stop_grace_period: 25s
+    restart: unless-stopped
+    networks: [platform]
+
+networks:
+  platform:
+    name: platform-${ENV:?set ENV}
+    external: true
